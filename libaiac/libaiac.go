@@ -63,6 +63,9 @@ const (
 
 	// ModelCodeDaVinci2 represents the code-davinci-002 code generation model.
 	ModelCodeDaVinci2 = "code-davinci-002"
+
+	// ModelGPT4 represents the gpt-4 model.
+	ModelGPT4 = "gpt-4"
 )
 
 // Decode is used by the kong library to map CLI-provided values to the Model
@@ -75,11 +78,7 @@ func (m *Model) Decode(ctx *kong.DecodeContext) error {
 		return fmt.Errorf("failed getting model value: %w", err)
 	}
 
-	for _, supported := range []Model{
-		ModelChatGPT,
-		ModelTextDaVinci3,
-		ModelCodeDaVinci2,
-	} {
+	for _, supported := range SupportedModels {
 		if string(supported) == provided {
 			*m = supported
 			return nil
@@ -90,11 +89,21 @@ func (m *Model) Decode(ctx *kong.DecodeContext) error {
 }
 
 // SupportedModels is a list of all models supported by aiac
-var SupportedModels = []string{ModelChatGPT, ModelTextDaVinci3, ModelCodeDaVinci2}
+var SupportedModels = []Model{
+	ModelChatGPT,
+	ModelTextDaVinci3,
+	ModelCodeDaVinci2,
+	ModelGPT4,
+}
 
-// MaxTokens is the maximum amount of tokens supported by the model used. Newer
-// OpenAI models support a maximum of 4096 tokens.
-var MaxTokens = 4096
+// MaxTokens is the maximum amount of tokens supported by each model used.
+// Refer to https://platform.openai.com/docs/models/embeddings
+var MaxTokens = map[Model]int{
+	ModelChatGPT:      4096, //nolint: gomnd
+	ModelTextDaVinci3: 4097, //nolint: gomnd
+	ModelCodeDaVinci2: 8001, //nolint: gomnd
+	ModelGPT4:         8192, //nolint: gomnd
+}
 
 // NewClient creates a new instance of the Client struct, with the provided
 // input options. Neither the OpenAI API nor ChatGPT are yet contacted at this
@@ -333,7 +342,7 @@ func (client *Client) generateWithChatModel(ctx context.Context, prompt string) 
 			"messages": []map[string]string{
 				{"role": "user", "content": prompt},
 			},
-			"max_tokens": MaxTokens + 1 - len(prompt),
+			"max_tokens": MaxTokens[client.model] - len(prompt),
 		}).
 		Into(&answer).
 		RunContext(ctx)
@@ -372,7 +381,7 @@ func (client *Client) generateWithCompletionsModel(
 		JSONBody(map[string]interface{}{
 			"model":      client.model,
 			"prompt":     prompt,
-			"max_tokens": MaxTokens + 1 - len(prompt),
+			"max_tokens": MaxTokens[client.model] - len(prompt),
 		}).
 		Into(&answer).
 		RunContext(ctx)
